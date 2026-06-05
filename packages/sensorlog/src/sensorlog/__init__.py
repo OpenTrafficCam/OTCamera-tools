@@ -1,22 +1,27 @@
-from abc import ABC, abstractmethod
-from collections.abc import Collection, Callable
 import csv
+import logging
+from abc import abstractmethod
+from collections.abc import Callable, Collection
+from contextlib import AbstractContextManager
 from datetime import date, datetime
 from pathlib import Path
+from threading import Event, Thread
+
+lib_logger = logging.getLogger(__name__)
 
 
-class SensorLogger(ABC):
+class CsvLogger(AbstractContextManager):
     @abstractmethod
-    def write(self, measures: dict, datetime: str | None): ...
+    def write(self, row: dict, timestamp: None | str = None): ...
 
 
-class FileSensorLogger(SensorLogger):
+class FileCsvLogger(CsvLogger):
     """Log sensor values to a csv-file.
 
     Usage:
 
     ```
-    with FileSensorLogger(file_path="sensors.csv", fieldnames=["sensor_a", "sensor_b"]) as logger:
+    with FileCsvLogger(file_path="sensors.csv", fieldnames=["sensor_a", "sensor_b"]) as logger:
         logger.write({"sensor_a": 0.1, "sensor_b": 0.2})
         logger.write({"sensor_a": 0.15, "sensor_b": 0.21})
     ```
@@ -26,7 +31,7 @@ class FileSensorLogger(SensorLogger):
 
     datetime,sensor_a,sensor_b\n
     2025-12-02T12:00:00,0.1,0.2\n
-    2025-12-02T12:00:01,0.15,021\n
+    2025-12-02T12:00:01,0.15,0.21\n
 
     The name and content of the first column can be influenced by modifying the `time_func` and `time_column_name`
     parameters.
@@ -35,7 +40,7 @@ class FileSensorLogger(SensorLogger):
     def __init__(
         self,
         file_path: Path,
-        fieldnames: Collection[str],
+        fieldnames: Collection[str] | None = None,
         time_func: Callable[[], str] = lambda: datetime.now().isoformat(),
         time_column_name: str = "datetime",
     ):
@@ -46,7 +51,7 @@ class FileSensorLogger(SensorLogger):
             fieldnames:
         """
         self.time_column_name = time_column_name
-        self.fieldnames = [time_column_name] + list(fieldnames)
+        self.fieldnames = list(fieldnames) if fieldnames is not None else None
 
         self.time_func = time_func
 
@@ -55,9 +60,7 @@ class FileSensorLogger(SensorLogger):
         self._file_handle = None
         self._writer = None
 
-        self._init_writer()
-
-    def _init_writer(self):
+    def _open(self):
         if self._file_handle is not None:
             self._file_handle.close()
 
@@ -65,37 +68,40 @@ class FileSensorLogger(SensorLogger):
         if not self._file_path.exists() or self._file_path.stat().st_size == 0:
             is_new = True
 
-        self._file_handle = open(self._file_path, "a")
-        self._writer = csv.DictWriter(self._file_handle, fieldnames=self.fieldnames)
+        self._file_handle = open(self._file_path, "a", newline="", encoding="utf-8")
+        self._writer = csv.DictWriter(
+            self._file_handle, fieldnames=[self.time_column_name] + self.fieldnames
+        )
 
         if is_new:
             self._writer.writeheader()
 
     def close(self) -> None:
-        self._file_handle.close()
-        self._file_handle = None
+        if self._file_handle is not None:
+            self._file_handle.close()
+            self._file_handle = None
 
-    def write(self, measures: dict, datetime: str | None = None) -> None:
-        if datetime is not None:
-            measures[self.time_column_name] = datetime
-        else:
-            measures[self.time_column_name] = self.time_func()
+    def write(self, row: dict, timestamp: str | None = None) -> None:
+        if self._writer is None:
+            if self.fieldnames is None:
+                self.fieldnames = list(row.keys())
+            self._open()
 
-        self._writer.writerow(measures)
+        row_to_write = {self.time_column_name: timestamp or self.time_func(), **row}
 
-    def __enter__(self) -> "FileSensorLogger":
-        return self
+        self._writer.writerow(row_to_write)
+        self._file_handle.flush()
 
     def __exit__(self, exc_type, exc, tb):
         self.close()
 
 
-class DailyRotationSensorLogger(FileSensorLogger):
+class DailyRotationCsvLogger(FileCsvLogger):
     def __init__(
         self,
         directory: Path,
         prefix: str,
-        fieldnames: Collection[str],
+        fieldnames: Collection[str] | None = None,
         time_func: Callable[[], str] = lambda: datetime.today().isoformat(),
         time_column_name: str = "datetime",
     ):
@@ -120,11 +126,45 @@ class DailyRotationSensorLogger(FileSensorLogger):
     def _get_file_path(self) -> Path:
         return self.directory / f"{self.prefix}_{self._day.isoformat()}.csv"
 
-    def write(self, measures: dict, datetime: str | None = None):
+    def write(self, row: dict, timestamp: str | None = None):
         today = date.today()
         if today != self._day:
             self._day = today
             self._file_path = self._get_file_path()
-            self._init_writer()
 
-        super().write(measures=measures, datetime=datetime)
+            if self._file_handle is not None:
+                self._file_handle.close()
+                self._file_handle = None
+
+            self._writer = None
+
+        super().write(row=row, timestamp=timestamp)
+
+
+class SensorLogger(Thread):
+    def __init__(
+        self,
+        logger: CsvLogger,
+        sensors: dict[str, Callable[[], float | int]],
+        wait: float,
+        *args,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        self._logger = logger
+        self._sensors = sensors
+        self._wait = wait
+        self._shutdown = Event()
+
+    def run(self) -> None:
+        with self._logger as logger:
+            while True:
+                try:
+                    logger.write({name: read() for name, read in self._sensors.items()})
+                except Exception as e:
+                    lib_logger.warning(f"Exception while getting sensor data: {e}")
+                if self._shutdown.wait(timeout=self._wait):
+                    break
+
+    def stop(self) -> None:
+        self._shutdown.set()

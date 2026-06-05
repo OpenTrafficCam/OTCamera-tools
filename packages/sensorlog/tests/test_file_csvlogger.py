@@ -11,7 +11,7 @@ def test_file_log():
         time_mock = Mock()
         time_mock.return_value = "2026-06-01"
 
-        logger = sensorlog.FileSensorLogger(
+        logger = sensorlog.FileCsvLogger(
             file_path=Path(fp.name), fieldnames=["log_a", "log_b"], time_func=time_mock
         )
         logger.write({"log_a": 1, "log_b": 2})
@@ -30,13 +30,13 @@ def test_file_log_only_writes_header_on_new_files():
         time_mock = Mock()
         time_mock.side_effect = ["2026-06-01T12:00", "2026-06-01T13:00"]
 
-        logger = sensorlog.FileSensorLogger(
+        logger = sensorlog.FileCsvLogger(
             file_path=Path(fp.name), fieldnames=["log_a", "log_b"], time_func=time_mock
         )
         logger.write({"log_a": 1, "log_b": 2})
         logger.close()
 
-        logger = sensorlog.FileSensorLogger(
+        logger = sensorlog.FileCsvLogger(
             file_path=Path(fp.name), fieldnames=["log_a", "log_b"], time_func=time_mock
         )
         logger.write({"log_a": 3, "log_b": 4})

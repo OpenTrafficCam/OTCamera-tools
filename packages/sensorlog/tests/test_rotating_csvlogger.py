@@ -12,12 +12,10 @@ def test_rotating_sensorlogger():
     with tempfile.TemporaryDirectory() as tmpdir, patch("sensorlog.date") as mock_date:
         mock_date.today.return_value = date(2026, 6, 1)
 
-        logger = sensorlog.DailyRotationSensorLogger(
+        with sensorlog.DailyRotationCsvLogger(
             directory=Path(tmpdir), prefix="test", fieldnames=["log_a", "log_b"]
-        )
-        logger.write({"log_a": 1, "log_b": 2})
-
-        logger.close()
+        ) as logger:
+            logger.write({"log_a": 1, "log_b": 2})
 
         dir_iter = Path(tmpdir).iterdir()
 
@@ -32,7 +30,7 @@ def test_rotating_sensorlogger_can_handle_date_change():
             date(2026, 6, 2),
         ]
 
-        logger = sensorlog.DailyRotationSensorLogger(
+        logger = sensorlog.DailyRotationCsvLogger(
             directory=Path(tmpdir), prefix="test", fieldnames=["log_a", "log_b"]
         )
         logger.write({"log_a": 1, "log_b": 2})
