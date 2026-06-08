@@ -4,20 +4,12 @@ import shutil
 from collections.abc import Callable
 from pathlib import Path
 
-from otc_metrics import DailyRotationCsvLogger, MetricsLogger
+import ntplib
 import psutil
 
+from otc_metrics import DailyRotationCsvLogger, MetricsLogger
 
 logging.basicConfig(level="INFO")
-
-
-OS_LOG_METRICS: dict[str, Callable[[], int | float]] = {
-    "cpu_perc": psutil.cpu_percent,
-    "ram_perc": lambda: psutil.virtual_memory().percent,
-    "ram_available": lambda: psutil.virtual_memory().available / (1024 * 1024),
-    "disk_perc_root": lambda: psutil.disk_usage("/").percent,
-    "disk_free_mb_root": lambda: shutil.disk_usage("/").free / (1024 * 1024),
-}
 
 
 def init_daily_rotating_metrics_logger(
@@ -43,22 +35,52 @@ def init_daily_rotating_metrics_logger(
     )
 
 
-def main():
-
+def init_os_logger() -> MetricsLogger:
     os_logs_output_dir = Path(os.environ.get("OTC_OS_LOGS_DIR", "/tmp/"))
     os_logs_prefix = os.environ.get("OTC_OS_LOGS_PREFIX", "otc_os_logs")
     os_logs_wait_time = int(os.environ.get("OTC_OS_LOGS_WAIT", 5))
 
-    loggers = []
+    os_log_metrics: dict[str, Callable[[], int | float]] = {
+        "cpu_perc": psutil.cpu_percent,
+        "ram_perc": lambda: psutil.virtual_memory().percent,
+        "ram_available": lambda: psutil.virtual_memory().available / (1024 * 1024),
+        "disk_perc_root": lambda: psutil.disk_usage("/").percent,
+        "disk_free_mb_root": lambda: shutil.disk_usage("/").free / (1024 * 1024),
+    }
 
-    os_metrics_logger = init_daily_rotating_metrics_logger(
+    return init_daily_rotating_metrics_logger(
         output_folder=os_logs_output_dir,
         output_file_prefix=os_logs_prefix,
-        metrics=OS_LOG_METRICS,
+        metrics=os_log_metrics,
         interval=os_logs_wait_time,
     )
 
-    loggers.append(os_metrics_logger)
+
+def init_ntp_logger() -> MetricsLogger:
+
+    ntp_logs_output_dir = Path(os.environ.get("OTC_NTP_LOGS_DIR", "/tmp/"))
+    ntp_logs_prefix = os.environ.get("OTC_NTP_LOGS_PREFIX", "otc_ntp_logs")
+    ntp_logs_wait_time = int(os.environ.get("OTC_NTP_LOGS_WAIT", 60))
+    ntp_logs_server = os.environ.get("OTC_NTP_LOGS_SERVER", "de.pool.ntp.org")
+
+    NTP_METRICS = {
+        "ntp_offset": lambda: ntplib.NTPClient().request(ntp_logs_server).offset
+    }
+
+    return init_daily_rotating_metrics_logger(
+        output_folder=ntp_logs_output_dir,
+        output_file_prefix=ntp_logs_prefix,
+        metrics=NTP_METRICS,
+        interval=ntp_logs_wait_time,
+    )
+
+
+def main():
+
+    loggers = []
+
+    loggers.append(init_os_logger())
+    loggers.append(init_ntp_logger())
 
     for logger in loggers:
         logger.start()
