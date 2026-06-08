@@ -4,15 +4,18 @@ from pathlib import Path
 
 from unittest.mock import patch
 
-import sensorlog
+import otc_metrics
 
 
 def test_rotating_sensorlogger():
 
-    with tempfile.TemporaryDirectory() as tmpdir, patch("sensorlog.date") as mock_date:
+    with (
+        tempfile.TemporaryDirectory() as tmpdir,
+        patch("otc_metrics.date") as mock_date,
+    ):
         mock_date.today.return_value = date(2026, 6, 1)
 
-        with sensorlog.DailyRotationCsvLogger(
+        with otc_metrics.DailyRotationCsvLogger(
             directory=Path(tmpdir), prefix="test", fieldnames=["log_a", "log_b"]
         ) as logger:
             logger.write({"log_a": 1, "log_b": 2})
@@ -23,14 +26,17 @@ def test_rotating_sensorlogger():
 
 
 def test_rotating_sensorlogger_can_handle_date_change():
-    with tempfile.TemporaryDirectory() as tmpdir, patch("sensorlog.date") as mock_date:
+    with (
+        tempfile.TemporaryDirectory() as tmpdir,
+        patch("otc_metrics.date") as mock_date,
+    ):
         mock_date.today.side_effect = [
             date(2026, 6, 1),
             date(2026, 6, 1),
             date(2026, 6, 2),
         ]
 
-        logger = sensorlog.DailyRotationCsvLogger(
+        logger = otc_metrics.DailyRotationCsvLogger(
             directory=Path(tmpdir), prefix="test", fieldnames=["log_a", "log_b"]
         )
         logger.write({"log_a": 1, "log_b": 2})

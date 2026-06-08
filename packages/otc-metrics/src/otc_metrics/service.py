@@ -4,7 +4,7 @@ import shutil
 from collections.abc import Callable
 from pathlib import Path
 
-from sensorlog import DailyRotationCsvLogger, MetricsLogger
+from otc_metrics import DailyRotationCsvLogger, MetricsLogger
 import psutil
 
 
@@ -59,15 +59,6 @@ def main():
     )
 
     loggers.append(os_metrics_logger)
-
-    test_logger = init_daily_rotating_metrics_logger(
-        output_folder=Path("/tmp/test_logger"),
-        output_file_prefix="test",
-        metrics={"foo": lambda: 123},
-        interval=10,
-    )
-
-    loggers.append(test_logger)
 
     for logger in loggers:
         logger.start()

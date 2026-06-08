@@ -1,4 +1,4 @@
-from sensorlog import SensorLogger, DailyRotationCsvLogger
+from otc_metrics import MetricsLogger, DailyRotationCsvLogger
 import tempfile
 import random
 from pathlib import Path
@@ -7,10 +7,10 @@ import time
 
 def test_sensorlogger():
     with tempfile.TemporaryDirectory() as tempdir:
-        sensor_logger = SensorLogger(
+        sensor_logger = MetricsLogger(
             logger=DailyRotationCsvLogger(directory=Path(tempdir), prefix="test"),
-            sensors={"test": lambda: random.random()},
-            wait=0.1,
+            metrics={"test": lambda: random.random()},
+            interval=0.1,
         )
 
         sensor_logger.start()
