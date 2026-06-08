@@ -9,7 +9,7 @@ dependencies = [
 ]
 
 [project.scripts]
-os-logs = "sensorlog.os_logs:main"
+write-logs = "sensorlog.write_logs:main"
 
 [build-system]
 requires = ["uv_build>=0.11.17,<0.12"]
