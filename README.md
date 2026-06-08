@@ -6,4 +6,4 @@ The repository is split into multiple packages using `uv`'s [workspace feature](
 
 ## Contents
 
-- `packages/sensorlog`: Tools to help logging sensor values to local files.
+- `packages/otc-metrics`: Tools to help logging metrics to csv files.
