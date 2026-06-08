@@ -36,7 +36,7 @@ def init_daily_rotating_metrics_logger(
 
 
 def init_os_logger() -> MetricsLogger:
-    os_logs_output_dir = Path(os.environ.get("OTC_OS_LOGS_DIR", "/tmp/"))
+    os_logs_output_dir = Path(os.environ.get("OTC_OS_LOGS_DIR", "/var/log"))
     os_logs_prefix = os.environ.get("OTC_OS_LOGS_PREFIX", "otc_os_logs")
     os_logs_wait_time = int(os.environ.get("OTC_OS_LOGS_WAIT", 5))
 
@@ -58,7 +58,7 @@ def init_os_logger() -> MetricsLogger:
 
 def init_ntp_logger() -> MetricsLogger:
 
-    ntp_logs_output_dir = Path(os.environ.get("OTC_NTP_LOGS_DIR", "/tmp/"))
+    ntp_logs_output_dir = Path(os.environ.get("OTC_NTP_LOGS_DIR", "/var/log"))
     ntp_logs_prefix = os.environ.get("OTC_NTP_LOGS_PREFIX", "otc_ntp_logs")
     ntp_logs_wait_time = int(os.environ.get("OTC_NTP_LOGS_WAIT", 60))
     ntp_logs_server = os.environ.get("OTC_NTP_LOGS_SERVER", "de.pool.ntp.org")
