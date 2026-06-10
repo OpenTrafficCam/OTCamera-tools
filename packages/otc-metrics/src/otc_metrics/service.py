@@ -48,6 +48,15 @@ def init_os_logger() -> MetricsLogger:
         "disk_free_mb_root": lambda: shutil.disk_usage("/").free / (1024 * 1024),
     }
 
+    def get_cpu_temp():
+        return psutil.sensors_tempertaures()["cpu_thermal"][0].current
+
+    try:
+        get_cpu_temp()
+        os_log_metrics["cpu_temp"] = get_cpu_temp
+    except (AttributeError, KeyError):
+        logging.warning("CPU temp is not available as a metric on this system.")
+
     return init_daily_rotating_metrics_logger(
         output_folder=os_logs_output_dir,
         output_file_prefix=os_logs_prefix,
