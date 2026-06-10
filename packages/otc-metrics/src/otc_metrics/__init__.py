@@ -42,6 +42,7 @@ from datetime import date, datetime
 from io import TextIOWrapper
 from pathlib import Path
 from threading import Event, Thread
+from typing import Any
 
 lib_logger = logging.getLogger(__name__)
 
@@ -284,7 +285,7 @@ class MetricsLogger(Thread):
     def __init__(
         self,
         logger: CsvLogger,
-        metrics: dict[str, Callable[[], float | int]],
+        metrics: dict[str, Callable[[], Any]],
         interval: float,
     ):
         """Create a new MetricsLogger thread.
@@ -294,8 +295,8 @@ class MetricsLogger(Thread):
         Args:
             logger (CsvLogger): A CsvLogger instace used to write the metrics
                 data to a csv file.
-            metrics (dict[str, Callable[[], float | int]]): A mapping from
-                field names to callables that return
+            metrics (dict[str, Callable[[], Any]]): A mapping from
+                field names to callables that return the metrics to write.
             interval (float): The wait time between one cycle of gathering
                 metrics results and writing them.
         """
@@ -309,10 +310,17 @@ class MetricsLogger(Thread):
         """Start the logging activity."""
         with self._logger as logger:
             while True:
-                try:
-                    logger.write({name: read() for name, read in self._metrics.items()})
-                except Exception as e:
-                    lib_logger.warning(f"Exception while getting sensor data: {e}")
+                row = {}
+                for name, read in self._metrics.items():
+                    try:
+                        val = str(read())
+                    except Exception as e:
+                        val = "N/A"
+                        lib_logger.warning(
+                            f"Exception while getting metric 'name': {e}"
+                        )
+                    row[name] = val
+                logger.write(row)
                 if self._shutdown.wait(timeout=self._interval):
                     break
 
