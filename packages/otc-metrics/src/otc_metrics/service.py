@@ -49,7 +49,7 @@ def init_os_logger() -> MetricsLogger:
     }
 
     def get_cpu_temp():
-        return psutil.sensors_tempertaures()["cpu_thermal"][0].current
+        return psutil.sensors_temperatures()["cpu_thermal"][0].current
 
     try:
         get_cpu_temp()
