@@ -50,7 +50,9 @@ lib_logger = logging.getLogger(__name__)
 class CsvLogger(AbstractContextManager):
     """ABC for CsvLoggers.
 
-    Assumes
+    Is an AbstractContextManager. It assumes that children will take care of the
+    file handles for writing to CSV files and that the underlying resources
+    can be safely operated by using a context manager.
     """
 
     @abstractmethod
