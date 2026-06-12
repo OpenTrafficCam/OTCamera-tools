@@ -107,7 +107,7 @@ def init_sensor_logger(
         os.environ.get("OTC_SENSOR_LOGS_DIR", DEFAULT_LOG_DIR)
     )
     sensor_logs_prefix = os.environ.get("OTC_SENSOR_LOGS_PREFIX", "otc_sensor_logs")
-    sensor_logs_wait_time = int(os.environ.get("OTC_SENSOR_LOGS_WAIT", 5))
+    sensor_logs_wait_time = int(os.environ.get("OTC_SENSOR_LOGS_WAIT", 60))
 
     def read_adc_temp() -> float:
         v_ntc = adc.read_channel(3)
@@ -132,13 +132,11 @@ def init_sensor_logger(
         "acc_z": lambda: imu.read_acc()[2],
     }
 
-    return MetricsLogger(
-        logger=DailyRotationCsvLogger(
-            directory=sensor_logs_output_dir,
-            prefix=sensor_logs_prefix,
-        ),
-        interval=sensor_logs_wait_time,
+    return init_daily_rotating_metrics_logger(
+        output_folder=sensor_logs_output_dir,
+        output_file_prefix=sensor_logs_prefix,
         metrics=sensor_metrics,
+        interval=sensor_logs_wait_time,
     )
 
 
