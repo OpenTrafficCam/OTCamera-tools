@@ -333,4 +333,3 @@ class MetricsLogger(Thread):
         file handle.
         """
         self._shutdown.set()
-        self._logger.close()

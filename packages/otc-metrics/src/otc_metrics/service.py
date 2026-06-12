@@ -1,13 +1,48 @@
+from __future__ import annotations
+
 import logging
+import math
 import os
+import platform
 import shutil
+import signal
+import threading
 from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import ntplib
 import psutil
 
 from otc_metrics import DailyRotationCsvLogger, MetricsLogger
+
+shutdown_event = threading.Event()
+
+
+def _handle_signal(signum, frame):
+    logging.info(f"Received signal {signum}, initiating shutdown ...")
+    shutdown_event.set()
+
+
+if TYPE_CHECKING:
+    from otc_metrics import sensors
+
+DEFAULT_LOG_DIR = "/var/log/otc_metrics"
+
+
+# best-effort to assess whether we are running on Raspberry Pi
+def _is_raspberry_pi() -> bool:
+    if platform.machine() not in ("armv7l", "aarch64") or platform.system() != "Linux":
+        return False
+    try:
+        with open("/proc/device-tree/model") as f:
+            return "raspberry pi" in f.read().lower()
+    except OSError:
+        return False
+
+
+IS_PI = _is_raspberry_pi()
+
 
 logging.basicConfig(level="INFO")
 
@@ -36,7 +71,7 @@ def init_daily_rotating_metrics_logger(
 
 
 def init_os_logger() -> MetricsLogger:
-    os_logs_output_dir = Path(os.environ.get("OTC_OS_LOGS_DIR", "/var/log"))
+    os_logs_output_dir = Path(os.environ.get("OTC_OS_LOGS_DIR", DEFAULT_LOG_DIR))
     os_logs_prefix = os.environ.get("OTC_OS_LOGS_PREFIX", "otc_os_logs")
     os_logs_wait_time = int(os.environ.get("OTC_OS_LOGS_WAIT", 5))
 
@@ -65,9 +100,51 @@ def init_os_logger() -> MetricsLogger:
     )
 
 
+def init_sensor_logger(
+    imu: sensors.LIS2DW12_impl, adc: sensors.TLA2024_impl
+) -> MetricsLogger:
+    sensor_logs_output_dir = Path(
+        os.environ.get("OTC_SENSOR_LOGS_DIR", DEFAULT_LOG_DIR)
+    )
+    sensor_logs_prefix = os.environ.get("OTC_SENSOR_LOGS_PREFIX", "otc_sensor_logs")
+    sensor_logs_wait_time = int(os.environ.get("OTC_SENSOR_LOGS_WAIT", 5))
+
+    def read_adc_temp() -> float:
+        v_ntc = adc.read_channel(3)
+
+        vdd = 3.3
+        r_fixed = 100000
+        ntc_T0 = 298.15
+        ntc_b = 3250.0
+        r_ntc = r_fixed * v_ntc / (vdd - v_ntc)
+        inv_T = (1.0 / ntc_T0) + (1.0 / ntc_b) * math.log(r_ntc / r_fixed)
+        T_ntc = 1.0 / inv_T - 273.15
+        return T_ntc
+
+    sensor_metrics = {
+        "usb_voltage": lambda: adc.read_channel(0) * 2,
+        "external_voltage": lambda: adc.read_channel(1) * 2,
+        "battery_voltage": lambda: adc.read_channel(2) * (1000 + 510) / 510,
+        "adc_temp": read_adc_temp,
+        "acc_temp": imu.read_temp,
+        "acc_x": lambda: imu.read_acc()[0],
+        "acc_y": lambda: imu.read_acc()[1],
+        "acc_z": lambda: imu.read_acc()[2],
+    }
+
+    return MetricsLogger(
+        logger=DailyRotationCsvLogger(
+            directory=sensor_logs_output_dir,
+            prefix=sensor_logs_prefix,
+        ),
+        interval=sensor_logs_wait_time,
+        metrics=sensor_metrics,
+    )
+
+
 def init_ntp_logger() -> MetricsLogger:
 
-    ntp_logs_output_dir = Path(os.environ.get("OTC_NTP_LOGS_DIR", "/var/log"))
+    ntp_logs_output_dir = Path(os.environ.get("OTC_NTP_LOGS_DIR", DEFAULT_LOG_DIR))
     ntp_logs_prefix = os.environ.get("OTC_NTP_LOGS_PREFIX", "otc_ntp_logs")
     ntp_logs_wait_time = int(os.environ.get("OTC_NTP_LOGS_WAIT", 60))
     ntp_logs_server = os.environ.get("OTC_NTP_LOGS_SERVER", "de.pool.ntp.org")
@@ -85,23 +162,45 @@ def init_ntp_logger() -> MetricsLogger:
 
 
 def main():
+    signal.signal(signal.SIGTERM, _handle_signal)
+    signal.signal(signal.SIGINT, _handle_signal)
 
     loggers = []
+
+    imu = adc = None
 
     loggers.append(init_os_logger())
     loggers.append(init_ntp_logger())
 
+    # write sensor metrics only if running on Pi
+    if IS_PI:
+        from otc_metrics import sensors
+
+        imu = sensors.LIS2DW12_impl()
+        adc = sensors.TLA2024_impl()
+
+        imu.open()
+        adc.open()
+
+        loggers.append(init_sensor_logger(imu=imu, adc=adc))
+    else:
+        logging.warning("Not running on Raspberry Pi, skip logging sensors.")
+
     for logger in loggers:
         logger.start()
 
-    try:
-        for logger in loggers:
-            logger.join()
-    except KeyboardInterrupt:
-        print("Shutting down loggers ...")
-        for logger in loggers:
-            logger.stop()
-            logger.join()
+    # block main thread until signal is raised.
+    shutdown_event.wait()
+
+    print("Shutting down loggers ...")
+    for logger in loggers:
+        logger.stop()
+    for logger in loggers:
+        logger.join()
+    if imu:
+        imu.close()
+    if adc:
+        adc.close()
 
 
 if __name__ == "__main__":

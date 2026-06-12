@@ -21,5 +21,6 @@ exclude-newer = "3 days"
 [[tool.mypy.overrides]]
 module = [
     "ntplib",
+    "smbus2"
 ]
 ignore_missing_imports = true
