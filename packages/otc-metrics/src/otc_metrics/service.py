@@ -9,12 +9,13 @@ import signal
 import threading
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import ntplib
 import psutil
 
 from otc_metrics import DailyRotationCsvLogger, MetricsLogger
+from otc_metrics.lte import LteStatus
 
 shutdown_event = threading.Event()
 
@@ -50,7 +51,7 @@ logging.basicConfig(level="INFO")
 def init_daily_rotating_metrics_logger(
     output_folder: Path,
     output_file_prefix: str,
-    metrics: dict[str, Callable[[], int | float]],
+    metrics: dict[str, Callable[[], Any]],
     interval: int,
 ):
 
@@ -159,6 +160,31 @@ def init_ntp_logger() -> MetricsLogger:
     )
 
 
+def init_lte_logger() -> MetricsLogger:
+
+    lte_logs_output_dir = Path(os.environ.get("OTC_LTE_LOGS_DIR", DEFAULT_LOG_DIR))
+    lte_logs_prefix = os.environ.get("OTC_LTE_LOGS_PREFIX", "otc_lte_logs")
+    lte_logs_wait_time = int(os.environ.get("OTC_LTE_LOGS_WAIT", 60))
+    lte_logs_modem_id = int(os.environ.get("OTC_LTE_LOGS_MODEM_ID", 0))
+
+    lte_status = LteStatus(modem_id=lte_logs_modem_id)
+
+    lte_metrics = {
+        "rsrp": lambda: lte_status.get_signal_strenght().rsrp,
+        "rsrq": lambda: lte_status.get_signal_strenght().rsrq,
+        "rssi": lambda: lte_status.get_signal_strenght().rssi,
+        "snr": lambda: lte_status.get_signal_strenght().snr,
+        "cell_id": lambda: lte_status.get_location_info().cell_id,
+    }
+
+    return init_daily_rotating_metrics_logger(
+        output_folder=lte_logs_output_dir,
+        output_file_prefix=lte_logs_prefix,
+        metrics=lte_metrics,
+        interval=lte_logs_wait_time,
+    )
+
+
 def main():
     signal.signal(signal.SIGTERM, _handle_signal)
     signal.signal(signal.SIGINT, _handle_signal)
@@ -170,7 +196,7 @@ def main():
     loggers.append(init_os_logger())
     loggers.append(init_ntp_logger())
 
-    # write sensor metrics only if running on Pi
+    # write sensor & lte metrics only if running on Pi
     if IS_PI:
         from otc_metrics import sensors
 
@@ -181,8 +207,10 @@ def main():
         adc.open()
 
         loggers.append(init_sensor_logger(imu=imu, adc=adc))
+
+        loggers.append(init_lte_logger())
     else:
-        logging.warning("Not running on Raspberry Pi, skip logging sensors.")
+        logging.warning("Not running on Raspberry Pi, skip logging sensors & lte.")
 
     for logger in loggers:
         logger.start()
