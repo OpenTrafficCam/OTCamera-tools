@@ -40,7 +40,7 @@ class LteStatus:
             capture_output=True,
         )
         modem_list = json.loads(c.stdout)
-        ids = [s.split("/")[-1] for s in modem_list["modem-list"]]
+        ids = [int(s.split("/")[-1]) for s in modem_list["modem-list"]]
 
         if modem_id not in ids:
             raise ValueError(f"no modem with id {modem_id} registered.")
