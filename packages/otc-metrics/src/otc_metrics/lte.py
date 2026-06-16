@@ -72,7 +72,7 @@ class LteStatus:
         )
         signal_values = json.loads(c.stdout)
 
-        nmea = signal_values["modem"]["gps"]["nmea"]
+        nmea = signal_values["modem"]["location"]["gps"]["nmea"]
 
         gps = self._parse_nmea(nmea)
 
