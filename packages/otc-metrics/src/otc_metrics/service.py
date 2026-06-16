@@ -11,7 +11,7 @@ import signal
 import threading
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import ntplib
 import psutil
@@ -196,12 +196,23 @@ def init_lte_logger() -> MetricsLogger:
 
     lte_status = LteStatus(modem_id=lte_logs_modem_id)
 
+    def get_gps_info(value: Literal["time", "lon", "lat"]):
+        loc_info = lte_status.get_location_info()
+
+        if loc_info.gps is None:
+            return None
+
+        return getattr(loc_info, value)
+
     lte_metrics = {
         "rsrp": lambda: lte_status.get_signal_strenght().rsrp,
         "rsrq": lambda: lte_status.get_signal_strenght().rsrq,
         "rssi": lambda: lte_status.get_signal_strenght().rssi,
         "snr": lambda: lte_status.get_signal_strenght().snr,
         "cell_id": lambda: lte_status.get_location_info().cell_id,
+        "gps_time": lambda: get_gps_info("time") or "N/A",
+        "gps_lon": lambda: get_gps_info("lon") or "N/A",
+        "gps_lat": lambda: get_gps_info("lat") or "N/A",
     }
 
     return init_daily_rotating_metrics_logger(

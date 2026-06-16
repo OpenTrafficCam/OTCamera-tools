@@ -13,8 +13,16 @@ class SignalStrength:
 
 
 @dataclass
+class GPS:
+    lat: float
+    lon: float
+    time: float
+
+
+@dataclass
 class Location:
     cell_id: str
+    gps: GPS | None
 
 
 class LteStatus:
@@ -39,13 +47,13 @@ class LteStatus:
 
     def get_signal_strenght(self) -> SignalStrength:
         c = subprocess.run(
-            ("mmcli", "-m", str(self.modem_id), "--get-signal", "--json-output"),
+            ("mmcli", "-m", str(self.modem_id), "--signal-get", "--output-json"),
             text=True,
             encoding="utf8",
             check=True,
             capture_output=True,
         )
-        signal_values = json.loads(c.stdout)
+        signal_values = json.loads(c.stdout)["modem"]["signal"]["lte"]
 
         return SignalStrength(
             rsrp=float(signal_values["rsrp"]),
@@ -56,7 +64,7 @@ class LteStatus:
 
     def get_location_info(self) -> Location:
         c = subprocess.run(
-            ("mmcli", "-m", str(self.modem_id), "--get-location", "--json-output"),
+            ("mmcli", "-m", str(self.modem_id), "--location-get", "--output-json"),
             text=True,
             encoding="utf8",
             check=True,
@@ -64,4 +72,23 @@ class LteStatus:
         )
         signal_values = json.loads(c.stdout)
 
-        return Location(cell_id=signal_values["modem"]["location"]["3gpp"]["cid"])
+        nmea = signal_values["modem"]["gps"]["nmea"]
+
+        gps = self._parse_nmea(nmea)
+
+        return Location(
+            cell_id=signal_values["modem"]["location"]["3gpp"]["cid"], gps=gps
+        )
+
+    def _parse_nmea(self, nmea: list[str]) -> GPS | None:
+        for s in nmea:
+            if s.startswith("$GPGGA"):
+                values = s.split(",")
+
+                time = float(values[1])
+                lat = float(values[2])
+                lon = float(values[3])
+
+                return GPS(lat, lon, time)
+
+        return None
