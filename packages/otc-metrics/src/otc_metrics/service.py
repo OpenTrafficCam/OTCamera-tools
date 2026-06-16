@@ -202,7 +202,7 @@ def init_lte_logger() -> MetricsLogger:
         if loc_info.gps is None:
             return None
 
-        return getattr(loc_info, value)
+        return getattr(loc_info.gps, value)
 
     lte_metrics = {
         "rsrp": lambda: lte_status.get_signal_strenght().rsrp,
