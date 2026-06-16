@@ -25,7 +25,11 @@ class LteStatus:
         self.modem_id = modem_id
 
         c = subprocess.run(
-            ("mmcli", "-L", "--output-json"), text=True, encoding="utf8", check=True
+            ("mmcli", "-L", "--output-json"),
+            text=True,
+            encoding="utf8",
+            check=True,
+            capture_output=True,
         )
         modem_list = json.loads(c.stdout)
         ids = [s.split("/")[-1] for s in modem_list["modem_list"]]
@@ -39,6 +43,7 @@ class LteStatus:
             text=True,
             encoding="utf8",
             check=True,
+            capture_output=True,
         )
         signal_values = json.loads(c.stdout)
 
@@ -55,6 +60,7 @@ class LteStatus:
             text=True,
             encoding="utf8",
             check=True,
+            capture_output=True,
         )
         signal_values = json.loads(c.stdout)
 
