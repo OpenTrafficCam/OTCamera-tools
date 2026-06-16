@@ -87,7 +87,7 @@ class LteStatus:
 
                 time = float(values[1])
                 lat = float(values[2])
-                lon = float(values[3])
+                lon = float(values[4])
 
                 return GPS(lat, lon, time)
 
