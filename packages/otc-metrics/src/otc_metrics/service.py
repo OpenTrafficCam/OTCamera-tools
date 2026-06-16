@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import logging
 import math
 import os
@@ -18,6 +20,18 @@ from otc_metrics import DailyRotationCsvLogger, MetricsLogger
 from otc_metrics.lte import LteStatus
 
 shutdown_event = threading.Event()
+
+OTC_I2C_LOCKFILE = "/tmp/otc_i2c.lock"
+
+
+@contextlib.contextmanager
+def i2c_lock():
+    with open(OTC_I2C_LOCKFILE, "w") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
 
 
 def _handle_signal(signum, frame):
@@ -111,26 +125,39 @@ def init_sensor_logger(
     sensor_logs_wait_time = int(os.environ.get("OTC_SENSOR_LOGS_WAIT", 60))
 
     def read_adc_temp() -> float:
-        v_ntc = adc.read_channel(3)
+        with i2c_lock():
+            v_ntc = adc.read_channel(3)
 
-        vdd = 3.3
-        r_fixed = 100000
-        ntc_T0 = 298.15
-        ntc_b = 3250.0
-        r_ntc = r_fixed * v_ntc / (vdd - v_ntc)
-        inv_T = (1.0 / ntc_T0) + (1.0 / ntc_b) * math.log(r_ntc / r_fixed)
-        T_ntc = 1.0 / inv_T - 273.15
-        return T_ntc
+            vdd = 3.3
+            r_fixed = 100000
+            ntc_T0 = 298.15
+            ntc_b = 3250.0
+            r_ntc = r_fixed * v_ntc / (vdd - v_ntc)
+            inv_T = (1.0 / ntc_T0) + (1.0 / ntc_b) * math.log(r_ntc / r_fixed)
+            T_ntc = 1.0 / inv_T - 273.15
+            return T_ntc
+
+    def read_adc_channel(num: int) -> float:
+        with i2c_lock():
+            return adc.read_channel(num)
+
+    def read_imu_temp() -> float:
+        with i2c_lock():
+            return imu.read_temp()
+
+    def read_imu_acc() -> tuple[float, float, float]:
+        with i2c_lock():
+            return imu.read_acc()
 
     sensor_metrics = {
-        "usb_voltage": lambda: adc.read_channel(0) * 2,
-        "external_voltage": lambda: adc.read_channel(1) * 2,
-        "battery_voltage": lambda: adc.read_channel(2) * (1000 + 510) / 510,
+        "usb_voltage": lambda: read_adc_channel(0) * 2,
+        "external_voltage": lambda: read_adc_channel(1) * 2,
+        "battery_voltage": lambda: read_adc_channel(2) * (1000 + 510) / 510,
         "adc_temp": read_adc_temp,
-        "acc_temp": imu.read_temp,
-        "acc_x": lambda: imu.read_acc()[0],
-        "acc_y": lambda: imu.read_acc()[1],
-        "acc_z": lambda: imu.read_acc()[2],
+        "acc_temp": read_imu_temp,
+        "acc_x": lambda: read_imu_acc()[0],
+        "acc_y": lambda: read_imu_acc()[1],
+        "acc_z": lambda: read_imu_acc()[2],
     }
 
     return init_daily_rotating_metrics_logger(

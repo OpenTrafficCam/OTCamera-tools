@@ -136,7 +136,7 @@ class LIS2DW12_impl:
             self._bus.close()
             self._bus = None
 
-    def read_acc(self):
+    def read_acc(self) -> tuple[float, float, float]:
         data = self.read_block(self.OUT_X_L, 6)
         x = self._to_int16(data[0], data[1]) >> 2
         y = self._to_int16(data[2], data[3]) >> 2
