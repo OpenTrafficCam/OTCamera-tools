@@ -26,6 +26,7 @@ OTC_I2C_LOCKFILE = "/tmp/otc_i2c.lock"
 
 @contextlib.contextmanager
 def i2c_lock():
+    """Exclusive file-based lock for I2C bus access across processes."""
     with open(OTC_I2C_LOCKFILE, "w") as f:
         fcntl.flock(f, fcntl.LOCK_EX)
         try:
@@ -35,6 +36,7 @@ def i2c_lock():
 
 
 def _handle_signal(signum, frame):
+    """Set the shutdown event on SIGTERM or SIGINT."""
     logging.info(f"Received signal {signum}, initiating shutdown ...")
     shutdown_event.set()
 
@@ -48,6 +50,10 @@ DEFAULT_LOG_DIR = "/var/log/otc_metrics"
 def _read_logger_env(
     namespace: str, default_prefix: str, default_wait: int
 ) -> tuple[Path, str, int]:
+    """Read log output directory, file prefix, and polling interval from environment variables.
+
+    Variables follow the pattern ``OTC_<NAMESPACE>_LOGS_{DIR,PREFIX,WAIT}``.
+    """
     ns = namespace.upper()
     return (
         Path(os.environ.get(f"OTC_{ns}_LOGS_DIR", DEFAULT_LOG_DIR)),
@@ -56,8 +62,8 @@ def _read_logger_env(
     )
 
 
-# best-effort to assess whether we are running on Raspberry Pi
 def _is_raspberry_pi() -> bool:
+    """Return True when running on a Raspberry Pi, via best-effort check of /proc/device-tree/model."""
     if platform.machine() not in ("armv7l", "aarch64") or platform.system() != "Linux":
         return False
     try:
@@ -79,7 +85,7 @@ def init_daily_rotating_metrics_logger(
     metrics: dict[str, Callable[[], Any]],
     interval: int,
 ):
-
+    """Create a `MetricsLogger` backed by a daily-rotating CSV file."""
     logging.info(
         "Start writing metrics {} to {}".format(
             ", ".join(metrics.keys()), output_folder
@@ -97,6 +103,7 @@ def init_daily_rotating_metrics_logger(
 
 
 def init_os_logger() -> MetricsLogger:
+    """Initialize a logger for OS-level metrics: CPU, RAM, disk, and (if available) CPU temperature."""
     os_logs_output_dir, os_logs_prefix, os_logs_wait_time = _read_logger_env(
         "os", "otc_os_logs", 5
     )
@@ -129,6 +136,7 @@ def init_os_logger() -> MetricsLogger:
 def init_sensor_logger(
     imu: sensors.LIS2DW12_impl, adc: sensors.TLA2024_impl
 ) -> MetricsLogger:
+    """Initialize a logger for hardware sensor metrics: voltages, NTC/IMU temperatures, and accelerometer data."""
     sensor_logs_output_dir, sensor_logs_prefix, sensor_logs_wait_time = (
         _read_logger_env("sensor", "otc_sensor_logs", 60)
     )
@@ -177,7 +185,7 @@ def init_sensor_logger(
 
 
 def init_ntp_logger() -> MetricsLogger:
-
+    """Initialize a logger for NTP clock offset against the configured NTP server."""
     ntp_logs_output_dir, ntp_logs_prefix, ntp_logs_wait_time = _read_logger_env(
         "ntp", "otc_ntp_logs", 60
     )
@@ -196,7 +204,7 @@ def init_ntp_logger() -> MetricsLogger:
 
 
 def init_lte_logger() -> MetricsLogger:
-
+    """Initialize a logger for LTE modem metrics: signal strength and GPS location."""
     lte_logs_output_dir, lte_logs_prefix, lte_logs_wait_time = _read_logger_env(
         "lte", "otc_lte_logs", 60
     )
@@ -232,6 +240,7 @@ def init_lte_logger() -> MetricsLogger:
 
 
 def main():
+    """Entry point: start all metric loggers and block until SIGTERM or SIGINT."""
     signal.signal(signal.SIGTERM, _handle_signal)
     signal.signal(signal.SIGINT, _handle_signal)
 
