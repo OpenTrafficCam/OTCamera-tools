@@ -143,7 +143,13 @@ class FileCsvLogger(CsvLogger):
 
         self._file_handle = open(self._file_path, "a", newline="", encoding="utf-8")
         self._writer = csv.DictWriter(
-            self._file_handle, fieldnames=[self.time_fieldname] + self.fieldnames
+            self._file_handle,
+            fieldnames=[self.time_fieldname] + self.fieldnames,
+            restval="N/A",
+            # multi-value callables use a group key ("imu", "signal") that never
+            # becomes a fieldname — only their expanded dict keys do. ignore it
+            # rather than raising when it appears as an extra on error rows.
+            extrasaction="ignore",
         )
 
         if is_new:
@@ -299,6 +305,8 @@ class MetricsLogger(Thread):
                 data to a csv file.
             metrics (dict[str, Callable[[], Any]]): A mapping from
                 field names to callables that return the metrics to write.
+                A callable may return a plain value (written under its key)
+                or a dict (its key/value pairs are expanded directly into the row).
             interval (float): The wait time between one cycle of gathering
                 metrics results and writing them.
         """
@@ -315,13 +323,17 @@ class MetricsLogger(Thread):
                 row = {}
                 for name, read in self._metrics.items():
                     try:
-                        val = str(read())
+                        val = read()
                     except Exception as e:
-                        val = "N/A"
                         lib_logger.warning(
-                            f"Exception while getting metric 'name': {e}"
+                            f"Exception while getting metric '{name}': {e}"
                         )
-                    row[name] = val
+                        row[name] = "N/A"
+                        continue
+                    if isinstance(val, dict):
+                        row.update({k: str(v) for k, v in val.items()})
+                    else:
+                        row[name] = str(val)
                 logger.write(row)
                 if self._shutdown.wait(timeout=self._interval):
                     break

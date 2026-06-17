@@ -11,7 +11,7 @@ import signal
 import threading
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
 import ntplib
 import psutil
@@ -145,9 +145,10 @@ def init_sensor_logger(
         with i2c_lock():
             return imu.read_temp()
 
-    def read_imu_acc() -> tuple[float, float, float]:
+    def read_imu_acc() -> dict:
         with i2c_lock():
-            return imu.read_acc()
+            x, y, z = imu.read_acc()
+            return {"acc_x": x, "acc_y": y, "acc_z": z}
 
     sensor_metrics = {
         "usb_voltage": lambda: read_adc_channel(0) * 2,
@@ -155,9 +156,7 @@ def init_sensor_logger(
         "battery_voltage": lambda: read_adc_channel(2) * (1000 + 510) / 510,
         "adc_temp": read_adc_temp,
         "acc_temp": read_imu_temp,
-        "acc_x": lambda: read_imu_acc()[0],
-        "acc_y": lambda: read_imu_acc()[1],
-        "acc_z": lambda: read_imu_acc()[2],
+        "imu_acc": read_imu_acc,
     }
 
     return init_daily_rotating_metrics_logger(
@@ -196,23 +195,23 @@ def init_lte_logger() -> MetricsLogger:
 
     lte_status = LteStatus(modem_id=lte_logs_modem_id)
 
-    def get_gps_info(value: Literal["time", "lon", "lat"]):
+    def get_signal_strength() -> dict:
+        sig = lte_status.get_signal_strenght()
+        return {"rsrp": sig.rsrp, "rsrq": sig.rsrq, "rssi": sig.rssi, "snr": sig.snr}
+
+    def get_location() -> dict:
         loc_info = lte_status.get_location_info()
-
-        if loc_info.gps is None:
-            return None
-
-        return getattr(loc_info.gps, value)
+        gps = loc_info.gps
+        return {
+            "cell_id": loc_info.cell_id,
+            "gps_time": gps.time if gps else "N/A",
+            "gps_lon": gps.lon if gps else "N/A",
+            "gps_lat": gps.lat if gps else "N/A",
+        }
 
     lte_metrics = {
-        "rsrp": lambda: lte_status.get_signal_strenght().rsrp,
-        "rsrq": lambda: lte_status.get_signal_strenght().rsrq,
-        "rssi": lambda: lte_status.get_signal_strenght().rssi,
-        "snr": lambda: lte_status.get_signal_strenght().snr,
-        "cell_id": lambda: lte_status.get_location_info().cell_id,
-        "gps_time": lambda: get_gps_info("time") or "N/A",
-        "gps_lon": lambda: get_gps_info("lon") or "N/A",
-        "gps_lat": lambda: get_gps_info("lat") or "N/A",
+        "signal": get_signal_strength,
+        "location": get_location,
     }
 
     return init_daily_rotating_metrics_logger(
