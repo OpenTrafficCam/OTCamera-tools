@@ -45,6 +45,17 @@ if TYPE_CHECKING:
 DEFAULT_LOG_DIR = "/var/log/otc_metrics"
 
 
+def _read_logger_env(
+    namespace: str, default_prefix: str, default_wait: int
+) -> tuple[Path, str, int]:
+    ns = namespace.upper()
+    return (
+        Path(os.environ.get(f"OTC_{ns}_LOGS_DIR", DEFAULT_LOG_DIR)),
+        os.environ.get(f"OTC_{ns}_LOGS_PREFIX", default_prefix),
+        int(os.environ.get(f"OTC_{ns}_LOGS_WAIT", default_wait)),
+    )
+
+
 # best-effort to assess whether we are running on Raspberry Pi
 def _is_raspberry_pi() -> bool:
     if platform.machine() not in ("armv7l", "aarch64") or platform.system() != "Linux":
@@ -86,9 +97,9 @@ def init_daily_rotating_metrics_logger(
 
 
 def init_os_logger() -> MetricsLogger:
-    os_logs_output_dir = Path(os.environ.get("OTC_OS_LOGS_DIR", DEFAULT_LOG_DIR))
-    os_logs_prefix = os.environ.get("OTC_OS_LOGS_PREFIX", "otc_os_logs")
-    os_logs_wait_time = int(os.environ.get("OTC_OS_LOGS_WAIT", 5))
+    os_logs_output_dir, os_logs_prefix, os_logs_wait_time = _read_logger_env(
+        "os", "otc_os_logs", 5
+    )
 
     os_log_metrics: dict[str, Callable[[], int | float]] = {
         "cpu_perc": psutil.cpu_percent,
@@ -118,11 +129,9 @@ def init_os_logger() -> MetricsLogger:
 def init_sensor_logger(
     imu: sensors.LIS2DW12_impl, adc: sensors.TLA2024_impl
 ) -> MetricsLogger:
-    sensor_logs_output_dir = Path(
-        os.environ.get("OTC_SENSOR_LOGS_DIR", DEFAULT_LOG_DIR)
+    sensor_logs_output_dir, sensor_logs_prefix, sensor_logs_wait_time = (
+        _read_logger_env("sensor", "otc_sensor_logs", 60)
     )
-    sensor_logs_prefix = os.environ.get("OTC_SENSOR_LOGS_PREFIX", "otc_sensor_logs")
-    sensor_logs_wait_time = int(os.environ.get("OTC_SENSOR_LOGS_WAIT", 60))
 
     def read_adc_temp() -> float:
         with i2c_lock():
@@ -169,9 +178,9 @@ def init_sensor_logger(
 
 def init_ntp_logger() -> MetricsLogger:
 
-    ntp_logs_output_dir = Path(os.environ.get("OTC_NTP_LOGS_DIR", DEFAULT_LOG_DIR))
-    ntp_logs_prefix = os.environ.get("OTC_NTP_LOGS_PREFIX", "otc_ntp_logs")
-    ntp_logs_wait_time = int(os.environ.get("OTC_NTP_LOGS_WAIT", 60))
+    ntp_logs_output_dir, ntp_logs_prefix, ntp_logs_wait_time = _read_logger_env(
+        "ntp", "otc_ntp_logs", 60
+    )
     ntp_logs_server = os.environ.get("OTC_NTP_LOGS_SERVER", "de.pool.ntp.org")
 
     NTP_METRICS = {
@@ -188,9 +197,9 @@ def init_ntp_logger() -> MetricsLogger:
 
 def init_lte_logger() -> MetricsLogger:
 
-    lte_logs_output_dir = Path(os.environ.get("OTC_LTE_LOGS_DIR", DEFAULT_LOG_DIR))
-    lte_logs_prefix = os.environ.get("OTC_LTE_LOGS_PREFIX", "otc_lte_logs")
-    lte_logs_wait_time = int(os.environ.get("OTC_LTE_LOGS_WAIT", 60))
+    lte_logs_output_dir, lte_logs_prefix, lte_logs_wait_time = _read_logger_env(
+        "lte", "otc_lte_logs", 60
+    )
     lte_logs_modem_id = int(os.environ.get("OTC_LTE_LOGS_MODEM_ID", 0))
 
     lte_status = LteStatus(modem_id=lte_logs_modem_id)
