@@ -31,6 +31,27 @@ The resulting file will look like this:
 
 datetime,disk_free_root_mb\n
 2026-06-09T13:42:13.153427,125345\n
+```
+
+A callable may also return a dict to emit multiple columns at once. In that
+case the **dict's own keys** become the CSV column names — the key used in
+the `metrics` mapping acts only as a group label and does not appear in the
+file.
+
+```
+mlogger = MetricsLogger(
+    logger=FileCsvLogger(file_path="sensors.csv"),
+    metrics={
+        "imu": lambda: {"accel_x": 0.1, "accel_y": 0.2, "accel_z": 9.8},
+    },
+    interval=5
+)
+```
+
+The resulting file will look like this (note: "imu" does not appear):
+
+datetime,accel_x,accel_y,accel_z\n
+2026-06-09T13:42:13.153427,0.1,0.2,9.8\n
 """
 
 import csv
@@ -305,8 +326,11 @@ class MetricsLogger(Thread):
                 data to a csv file.
             metrics (dict[str, Callable[[], Any]]): A mapping from
                 field names to callables that return the metrics to write.
-                A callable may return a plain value (written under its key)
-                or a dict (its key/value pairs are expanded directly into the row).
+                A callable may return a plain value, written under its key in
+                the mapping, or a dict. When a callable returns a dict, the
+                **dict's own keys** become the CSV column names — the key used
+                in this mapping acts only as a group label and does not appear
+                as a column in the output.
             interval (float): The wait time between one cycle of gathering
                 metrics results and writing them.
         """
