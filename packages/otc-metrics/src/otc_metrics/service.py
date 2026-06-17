@@ -49,16 +49,23 @@ DEFAULT_LOG_DIR = "/var/log/otc_metrics"
 
 def _read_logger_env(
     namespace: str, default_prefix: str, default_wait: int
-) -> tuple[Path, str, int]:
-    """Read log output directory, file prefix, and polling interval from environment variables.
+) -> tuple[Path, str, int, bool]:
+    """Read log output directory, file prefix, polling interval, and enabled flag from environment variables.
 
-    Variables follow the pattern ``OTC_<NAMESPACE>_LOGS_{DIR,PREFIX,WAIT}``.
+    Variables follow the pattern ``OTC_<NAMESPACE>_LOGS_{DIR,PREFIX,WAIT,ENABLED}``.
+    Set ``OTC_<NAMESPACE>_LOGS_ENABLED=0`` (or ``false``/``no``) to disable a logger entirely.
     """
     ns = namespace.upper()
+    enabled = os.environ.get(f"OTC_{ns}_LOGS_ENABLED", "1").lower() not in (
+        "0",
+        "false",
+        "no",
+    )
     return (
         Path(os.environ.get(f"OTC_{ns}_LOGS_DIR", DEFAULT_LOG_DIR)),
         os.environ.get(f"OTC_{ns}_LOGS_PREFIX", default_prefix),
         int(os.environ.get(f"OTC_{ns}_LOGS_WAIT", default_wait)),
+        enabled,
     )
 
 
@@ -102,11 +109,14 @@ def init_daily_rotating_metrics_logger(
     )
 
 
-def init_os_logger() -> MetricsLogger:
+def init_os_logger() -> MetricsLogger | None:
     """Initialize a logger for OS-level metrics: CPU, RAM, disk, and (if available) CPU temperature."""
-    os_logs_output_dir, os_logs_prefix, os_logs_wait_time = _read_logger_env(
+    os_logs_output_dir, os_logs_prefix, os_logs_wait_time, enabled = _read_logger_env(
         "os", "otc_os_logs", 5
     )
+    if not enabled:
+        logging.info("OS logger disabled via OTC_OS_LOGS_ENABLED.")
+        return None
 
     os_log_metrics: dict[str, Callable[[], int | float]] = {
         "cpu_perc": psutil.cpu_percent,
@@ -135,11 +145,14 @@ def init_os_logger() -> MetricsLogger:
 
 def init_sensor_logger(
     imu: sensors.LIS2DW12_impl, adc: sensors.TLA2024_impl
-) -> MetricsLogger:
+) -> MetricsLogger | None:
     """Initialize a logger for hardware sensor metrics: voltages, NTC/IMU temperatures, and accelerometer data."""
-    sensor_logs_output_dir, sensor_logs_prefix, sensor_logs_wait_time = (
+    sensor_logs_output_dir, sensor_logs_prefix, sensor_logs_wait_time, enabled = (
         _read_logger_env("sensor", "otc_sensor_logs", 60)
     )
+    if not enabled:
+        logging.info("Sensor logger disabled via OTC_SENSOR_LOGS_ENABLED.")
+        return None
 
     def read_adc_temp() -> float:
         with i2c_lock():
@@ -184,11 +197,14 @@ def init_sensor_logger(
     )
 
 
-def init_ntp_logger() -> MetricsLogger:
+def init_ntp_logger() -> MetricsLogger | None:
     """Initialize a logger for NTP clock offset against the configured NTP server."""
-    ntp_logs_output_dir, ntp_logs_prefix, ntp_logs_wait_time = _read_logger_env(
-        "ntp", "otc_ntp_logs", 60
+    ntp_logs_output_dir, ntp_logs_prefix, ntp_logs_wait_time, enabled = (
+        _read_logger_env("ntp", "otc_ntp_logs", 60)
     )
+    if not enabled:
+        logging.info("NTP logger disabled via OTC_NTP_LOGS_ENABLED.")
+        return None
     ntp_logs_server = os.environ.get("OTC_NTP_LOGS_SERVER", "de.pool.ntp.org")
 
     NTP_METRICS = {
@@ -203,11 +219,14 @@ def init_ntp_logger() -> MetricsLogger:
     )
 
 
-def init_lte_logger() -> MetricsLogger:
+def init_lte_logger() -> MetricsLogger | None:
     """Initialize a logger for LTE modem metrics: signal strength and GPS location."""
-    lte_logs_output_dir, lte_logs_prefix, lte_logs_wait_time = _read_logger_env(
-        "lte", "otc_lte_logs", 60
+    lte_logs_output_dir, lte_logs_prefix, lte_logs_wait_time, enabled = (
+        _read_logger_env("lte", "otc_lte_logs", 60)
     )
+    if not enabled:
+        logging.info("LTE logger disabled via OTC_LTE_LOGS_ENABLED.")
+        return None
     lte_logs_modem_id = int(os.environ.get("OTC_LTE_LOGS_MODEM_ID", 0))
 
     lte_status = LteStatus(modem_id=lte_logs_modem_id)
@@ -248,8 +267,10 @@ def main():
 
     imu = adc = None
 
-    loggers.append(init_os_logger())
-    loggers.append(init_ntp_logger())
+    if logger := init_os_logger():
+        loggers.append(logger)
+    if logger := init_ntp_logger():
+        loggers.append(logger)
 
     # write sensor & lte metrics only if running on Pi
     if IS_PI:
@@ -261,9 +282,10 @@ def main():
         imu.open()
         adc.open()
 
-        loggers.append(init_sensor_logger(imu=imu, adc=adc))
-
-        loggers.append(init_lte_logger())
+        if logger := init_sensor_logger(imu=imu, adc=adc):
+            loggers.append(logger)
+        if logger := init_lte_logger():
+            loggers.append(logger)
     else:
         logging.warning("Not running on Raspberry Pi, skip logging sensors & lte.")
 
