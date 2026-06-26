@@ -17,3 +17,13 @@ repos:
       args: [ --fix ]
     # Run the formatter.
     - id: ruff-format
+- repo: local
+  hooks:
+    - id: mypy
+      name: Run mypy
+      entry: mypy packages
+      language: system
+      types: [python]
+      always_run: true
+      pass_filenames: false
+      args: [--config-file, pyproject.toml]
