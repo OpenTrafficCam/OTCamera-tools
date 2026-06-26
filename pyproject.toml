@@ -1,0 +1,26 @@
+[project]
+name = "OTCamera-Tools"
+version = "0.1.0"
+requires-python = ">=3.13"
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.6.0",
+    "pytest>=9.0.3,<10",
+    "ruff>=0.15.15",
+    "mypy>=2.1.0",
+    "types-psutil>=7.2.2.20260518",
+]
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv]
+exclude-newer = "3 days"
+
+[[tool.mypy.overrides]]
+module = [
+    "ntplib",
+    "smbus2"
+]
+ignore_missing_imports = true
