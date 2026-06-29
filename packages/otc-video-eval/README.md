@@ -34,25 +34,3 @@ Analyze three one-minute clips recorded at 25 fps:
 ```bash
 video-eval --fps 25 --length 60 clip1.h264 clip2.h264 clip3.h264
 ```
-
-Example output:
-
-```
-clip1.h264 has 1500 frames
-clip2.h264 has 1498 frames
-clip3.h264 has 1500 frames
-
-Finished analyzing 3 file(s) after 4.231s
-Eval results:
------------
-
-FPS:   25
-Length: 60s
-
-Number of files: 3
-Expected frames: 4500
-Actual frames:   4498
-Diff:            -2
-```
-
-A `Diff` of `0` means all files contain exactly the expected number of frames. Negative values indicate missing frames.
