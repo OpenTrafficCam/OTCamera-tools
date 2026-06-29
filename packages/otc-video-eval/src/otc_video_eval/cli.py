@@ -43,7 +43,7 @@ class EvalResult:
 
 
 def evaluate(
-    video_len_s: int, fps: 25, h264_file_paths: Collection[Path]
+    video_len_s: int, fps: 20, h264_file_paths: Collection[Path]
 ) -> EvalResult:
 
     sum_expected = 0
