@@ -13,6 +13,7 @@ exclude-newer-span = "P3D"
 [manifest]
 members = [
     "otc-metrics",
+    "otc-video-eval",
     "otcamera-tools",
 ]
 
@@ -245,6 +246,11 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [{ name = "types-psutil", specifier = "==7.2.2.*" }]
+
+[[package]]
+name = "otc-video-eval"
+version = "0.1.0"
+source = { editable = "packages/otc-video-eval" }
 
 [[package]]
 name = "otcamera-tools"
